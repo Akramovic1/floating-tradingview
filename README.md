@@ -14,7 +14,7 @@ _The floating TradingView widget in action - draggable, resizable, and always on
 
 - 📊 **Floating Widget**: Draggable and resizable TradingView chart that floats above web content
 - 💾 **Persistent Settings**: Saves position, size, and preferences across sessions
-- ⌨️ **Keyboard Shortcuts**: Toggle visibility with `Ctrl+Shift+T`
+- ⌨️ **Keyboard Shortcuts**: Toggle visibility with `Ctrl+Shift+F`
 - 🎨 **Customizable**: Choose symbols, intervals, themes, and chart styles
 - 👻 **Opacity Control**: Adjust transparency to see content underneath
 - 🔄 **Quick Toggle**: Show/hide the widget instantly
@@ -95,22 +95,6 @@ To modify the extension:
 2. Go to `chrome://extensions/`
 3. Click the refresh icon on the extension card
 4. Reload any tabs where you're using the extension
-
-## Known Limitations
-
-- The widget requires an internet connection to load TradingView charts
-- Some websites with strict CSP policies may prevent the widget from loading
-- The extension cannot function on Chrome system pages (like chrome://)
-
-## Future Enhancements
-
-- Multiple floating windows support
-- Drawing tools integration
-- Alert notifications
-- Custom indicators
-- Window snapping to edges
-- Preset layouts
-- Export/import settings
 
 ## Credits
 
