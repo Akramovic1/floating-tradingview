@@ -1,0 +1,151 @@
+/* Styles for Floating TradingView Extension */
+
+/* Ensure the floating window stays on top */
+#floating-tradingview-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Prevent selection on draggable elements */
+#floating-tradingview-container .ftv-header {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* Smooth transitions for minimize/maximize */
+#floating-tradingview-container {
+    transition: height 0.3s ease, opacity 0.3s ease;
+}
+
+/* Ensure TradingView widget fills container */
+#floating-tradingview-container #tradingview-widget-container {
+    position: relative;
+    height: calc(100% - 35px);
+    width: 100%;
+}
+
+#floating-tradingview-container #tradingview-widget-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}
+
+/* Hide scrollbars in widget container */
+#floating-tradingview-container #tradingview-widget-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* Ensure resize handle is always visible */
+#floating-tradingview-container .ftv-resize-handle {
+    z-index: 10;
+}
+
+/* Loading state */
+#floating-tradingview-container.loading #tradingview-widget-container::before {
+    content: 'Loading TradingView...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #787b86;
+    font-size: 14px;
+}
+
+/* Minimized state */
+#floating-tradingview-container.minimized {
+    height: 35px !important;
+}
+
+#floating-tradingview-container.minimized #tradingview-widget-container,
+#floating-tradingview-container.minimized .ftv-resize-handle {
+    display: none !important;
+}
+
+/* Focus styles for accessibility */
+#floating-tradingview-container button:focus {
+    outline: 2px solid #2196F3;
+    outline-offset: 2px;
+}
+
+/* Ensure proper layering */
+#floating-tradingview-container * {
+    box-sizing: border-box;
+}
+
+/* Prevent conflicts with page styles */
+#floating-tradingview-container,
+#floating-tradingview-container * {
+    all: initial;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Fix for iframe sizing */
+#floating-tradingview-container #tradingview-widget-container {
+    position: relative;
+    height: calc(100% - 35px);
+    width: 100%;
+    overflow: hidden;
+    background: #131722;
+}
+
+#floating-tradingview-container #tradingview-widget-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    pointer-events: auto;
+}
+
+/* Ensure iframe has no borders or margins */
+#floating-tradingview-container iframe {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Prevent drag issues */
+#floating-tradingview-container {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Optimize dragging performance */
+#floating-tradingview-container.dragging,
+#floating-tradingview-container.resizing {
+    will-change: transform, left, top, width, height;
+    pointer-events: none;
+}
+
+#floating-tradingview-container.dragging .ftv-header,
+#floating-tradingview-container.resizing .ftv-resize-handle {
+    pointer-events: auto;
+}
+
+#floating-tradingview-container.dragging iframe,
+#floating-tradingview-container.resizing iframe {
+    pointer-events: none;
+}
+
+/* Smooth dragging */
+#floating-tradingview-container .ftv-header {
+    -webkit-app-region: no-drag;
+}
+
+/* Prevent text selection during drag */
+#floating-tradingview-container.dragging *,
+#floating-tradingview-container.resizing * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
