@@ -3,7 +3,7 @@
   "name": "Floating TradingView",
   "version": "1.0.0",
   "description": "A floating, resizable TradingView widget for multitasking traders",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
   "commands": {
     "toggle-widget": {
       "suggested_key": {
@@ -37,7 +37,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["inject.js"],
+      "resources": ["widget.html"],
       "matches": ["<all_urls>"]
     }
   ]

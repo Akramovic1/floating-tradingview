@@ -1,117 +1,226 @@
 // Background service worker for Floating TradingView Extension
 
-// Track tab states
-const tabStates = new Map();
+// Track global widget state
+let globalWidgetState = {
+  isVisible: false,
+  isMinimized: false,
+  settings: {
+    symbol: "BTCUSD",
+    interval: "D",
+    theme: "dark",
+    style: "1",
+    width: 600,
+    height: 400,
+    x: 100,
+    y: 100,
+    opacity: 1,
+  },
+};
 
-// Handle extension icon click
-chrome.action.onClicked.addListener((tab) => {
-  // This won't fire since we have a popup
-  // Popup handles the toggle
+// Track which tabs have the content script injected
+const injectedTabs = new Set();
+
+// Load saved state on startup
+chrome.runtime.onStartup.addListener(async () => {
+  const result = await chrome.storage.local.get(["globalWidgetState"]);
+  if (result.globalWidgetState) {
+    globalWidgetState = result.globalWidgetState;
+  }
+});
+
+// Save state changes
+async function saveGlobalState() {
+  await chrome.storage.local.set({ globalWidgetState: globalWidgetState });
+}
+
+// Inject content script into a tab
+async function injectContentScript(tabId) {
+  if (injectedTabs.has(tabId)) {
+    return;
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ["content.js"],
+    });
+
+    await chrome.scripting.insertCSS({
+      target: { tabId: tabId },
+      files: ["styles.css"],
+    });
+
+    injectedTabs.add(tabId);
+
+    // Send current state to the newly injected script
+    setTimeout(() => {
+      chrome.tabs.sendMessage(tabId, {
+        action: "syncState",
+        state: globalWidgetState,
+      });
+    }, 100);
+  } catch (error) {
+    console.error("Failed to inject content script:", error);
+  }
+}
+
+// Inject into all existing tabs on extension load
+chrome.runtime.onInstalled.addListener(async () => {
+  // Load saved state
+  const result = await chrome.storage.local.get(["globalWidgetState"]);
+  if (result.globalWidgetState) {
+    globalWidgetState = result.globalWidgetState;
+  }
+
+  // Get all tabs and inject content script
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (
+      tab.url &&
+      !tab.url.startsWith("chrome://") &&
+      !tab.url.startsWith("chrome-extension://")
+    ) {
+      await injectContentScript(tab.id);
+    }
+  }
+});
+
+// Inject into new tabs
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (
+    tab.id &&
+    tab.url &&
+    !tab.url.startsWith("chrome://") &&
+    !tab.url.startsWith("chrome-extension://")
+  ) {
+    // Wait a bit for the tab to fully load
+    setTimeout(() => {
+      injectContentScript(tab.id);
+    }, 1000);
+  }
+});
+
+// Inject when tab is updated
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (
+    changeInfo.status === "complete" &&
+    tab.url &&
+    !tab.url.startsWith("chrome://") &&
+    !tab.url.startsWith("chrome-extension://")
+  ) {
+    await injectContentScript(tabId);
+  }
+});
+
+// Clean up when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  injectedTabs.delete(tabId);
 });
 
 // Handle messages from content scripts and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
-    case "updateVisibility":
-      // Update badge to show status
-      if (sender.tab) {
-        tabStates.set(sender.tab.id, request.isVisible);
-        chrome.action.setBadgeText({
-          text: request.isVisible ? "ON" : "",
-          tabId: sender.tab.id,
+    case "updateGlobalState":
+      // Update global state from any tab
+      Object.assign(globalWidgetState, request.state);
+      saveGlobalState();
+
+      // Broadcast to all tabs
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach((tab) => {
+          if (tab.id !== sender.tab?.id && !tab.url.startsWith("chrome://")) {
+            chrome.tabs
+              .sendMessage(tab.id, {
+                action: "syncState",
+                state: globalWidgetState,
+              })
+              .catch(() => {}); // Ignore errors for tabs without content script
+          }
         });
-        chrome.action.setBadgeBackgroundColor({
-          color: "#4CAF50",
-        });
-      }
+      });
       break;
 
-    case "openSettings":
-      // Open popup for settings
-      chrome.action.openPopup();
+    case "getGlobalState":
+      sendResponse(globalWidgetState);
       break;
 
     case "toggleFromPopup":
-      // Forward toggle request to content script
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) {
-          chrome.tabs.sendMessage(
-            tabs[0].id,
-            { action: "toggle" },
-            (response) => {
-              if (chrome.runtime.lastError) {
-                // Content script not loaded, inject it
-                chrome.scripting.executeScript(
-                  {
-                    target: { tabId: tabs[0].id },
-                    files: ["content.js"],
-                  },
-                  () => {
-                    // Try again after injection
-                    setTimeout(() => {
-                      chrome.tabs.sendMessage(tabs[0].id, { action: "toggle" });
-                    }, 100);
-                  }
-                );
-              }
-              sendResponse(response);
-            }
-          );
-        }
+      // Toggle visibility globally
+      globalWidgetState.isVisible = !globalWidgetState.isVisible;
+      saveGlobalState();
+
+      // Broadcast to all tabs
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach((tab) => {
+          if (!tab.url.startsWith("chrome://")) {
+            chrome.tabs
+              .sendMessage(tab.id, {
+                action: "toggle",
+                isVisible: globalWidgetState.isVisible,
+              })
+              .catch(() => {});
+          }
+        });
       });
-      return true; // Keep message channel open
+
+      sendResponse({ success: true, isVisible: globalWidgetState.isVisible });
+      break;
+
+    case "updateSettings":
+      // Update settings globally
+      Object.assign(globalWidgetState.settings, request.settings);
+      saveGlobalState();
+
+      // Broadcast to all tabs
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach((tab) => {
+          if (!tab.url.startsWith("chrome://")) {
+            chrome.tabs
+              .sendMessage(tab.id, {
+                action: "updateSettings",
+                settings: globalWidgetState.settings,
+              })
+              .catch(() => {});
+          }
+        });
+      });
+
+      sendResponse({ success: true });
+      break;
   }
+
+  return true; // Keep message channel open for async responses
 });
 
 // Handle keyboard shortcuts
 chrome.commands.onCommand.addListener((command) => {
   if (command === "toggle-widget") {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(
-          tabs[0].id,
-          { action: "toggle" },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              // Content script not loaded, inject it
-              chrome.scripting.executeScript(
-                {
-                  target: { tabId: tabs[0].id },
-                  files: ["content.js"],
-                },
-                () => {
-                  // Try again after injection
-                  setTimeout(() => {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: "toggle" });
-                  }, 100);
-                }
-              );
-            }
-          }
-        );
-      }
+    // Toggle globally
+    globalWidgetState.isVisible = !globalWidgetState.isVisible;
+    saveGlobalState();
+
+    // Broadcast to all tabs
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach((tab) => {
+        if (!tab.url.startsWith("chrome://")) {
+          chrome.tabs
+            .sendMessage(tab.id, {
+              action: "toggle",
+              isVisible: globalWidgetState.isVisible,
+            })
+            .catch(() => {});
+        }
+      });
     });
   }
 });
 
 // Initialize extension
 chrome.runtime.onInstalled.addListener(() => {
-  // Set default settings
-  chrome.storage.local.get(["tradingViewSettings"], (result) => {
-    if (!result.tradingViewSettings) {
-      chrome.storage.local.set({
-        tradingViewSettings: {
-          symbol: "BTCUSD",
-          interval: "D",
-          theme: "dark",
-          style: "1",
-          width: 600,
-          height: 400,
-          x: 100,
-          y: 100,
-          opacity: 1,
-        },
-      });
+  // Set default settings if not exists
+  chrome.storage.local.get(["globalWidgetState"], (result) => {
+    if (!result.globalWidgetState) {
+      chrome.storage.local.set({ globalWidgetState: globalWidgetState });
     }
   });
 });

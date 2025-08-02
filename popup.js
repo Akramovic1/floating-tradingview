@@ -16,33 +16,19 @@ let isVisible = false;
 
 // Initialize popup
 document.addEventListener("DOMContentLoaded", async () => {
-  // Load current settings
-  await loadSettings();
-
-  // Get current visibility status
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.tabs.sendMessage(tabs[0].id, { action: "getStatus" }, (response) => {
-      if (response) {
-        isVisible = response.isVisible;
-        updateVisibilityToggle();
-      } else if (chrome.runtime.lastError) {
-        // Content script not loaded yet
-        console.log("Content script not loaded");
-      }
-    });
+  // Load current settings from global state
+  chrome.runtime.sendMessage({ action: "getGlobalState" }, (state) => {
+    if (state) {
+      currentSettings = state.settings;
+      isVisible = state.isVisible;
+      updateUI();
+      updateVisibilityToggle();
+    }
   });
 
   // Set up event listeners
   setupEventListeners();
 });
-
-async function loadSettings() {
-  const result = await chrome.storage.local.get(["tradingViewSettings"]);
-  if (result.tradingViewSettings) {
-    currentSettings = result.tradingViewSettings;
-    updateUI();
-  }
-}
 
 function updateUI() {
   document.getElementById("symbol").value = currentSettings.symbol;
@@ -67,18 +53,11 @@ function updateVisibilityToggle() {
 function setupEventListeners() {
   // Visibility toggle
   document.getElementById("visibilityToggle").addEventListener("click", () => {
-    // Send message through background script to ensure proper handling
+    // Send message through background script to toggle globally
     chrome.runtime.sendMessage({ action: "toggleFromPopup" }, (response) => {
       if (response && response.success) {
-        isVisible = !isVisible;
+        isVisible = response.isVisible;
         updateVisibilityToggle();
-      } else {
-        // If toggle failed, it might be because content script isn't loaded
-        // The background script will handle injection
-        setTimeout(() => {
-          isVisible = !isVisible;
-          updateVisibilityToggle();
-        }, 200);
       }
     });
   });
@@ -117,35 +96,29 @@ async function saveSettings() {
     opacity: parseFloat(document.getElementById("opacity").value),
   };
 
-  // Save to storage
-  await chrome.storage.local.set({ tradingViewSettings: newSettings });
+  // Send to background script to update globally
+  chrome.runtime.sendMessage(
+    {
+      action: "updateSettings",
+      settings: newSettings,
+    },
+    (response) => {
+      if (response && response.success) {
+        // Show success feedback
+        const saveBtn = document.getElementById("saveBtn");
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = "Saved!";
+        saveBtn.style.background = "#4CAF50";
 
-  // Send to content script
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.tabs.sendMessage(
-      tabs[0].id,
-      {
-        action: "updateSettings",
-        settings: newSettings,
-      },
-      (response) => {
-        if (response && response.success) {
-          // Show success feedback
-          const saveBtn = document.getElementById("saveBtn");
-          const originalText = saveBtn.textContent;
-          saveBtn.textContent = "Saved!";
-          saveBtn.style.background = "#4CAF50";
+        setTimeout(() => {
+          saveBtn.textContent = originalText;
+          saveBtn.style.background = "";
+        }, 2000);
 
-          setTimeout(() => {
-            saveBtn.textContent = originalText;
-            saveBtn.style.background = "";
-          }, 2000);
-        }
+        currentSettings = newSettings;
       }
-    );
-  });
-
-  currentSettings = newSettings;
+    }
+  );
 }
 
 async function resetSettings() {
@@ -163,15 +136,12 @@ async function resetSettings() {
   };
 
   currentSettings = defaultSettings;
-  await chrome.storage.local.set({ tradingViewSettings: defaultSettings });
   updateUI();
 
-  // Send to content script
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.tabs.sendMessage(tabs[0].id, {
-      action: "updateSettings",
-      settings: defaultSettings,
-    });
+  // Send to background script to update globally
+  chrome.runtime.sendMessage({
+    action: "updateSettings",
+    settings: defaultSettings,
   });
 
   // Show feedback

@@ -54,6 +54,32 @@
     transform: translate(-50%, -50%);
     color: #787b86;
     font-size: 14px;
+    z-index: 1;
+}
+
+/* Error state */
+#floating-tradingview-container .error-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #787b86;
+}
+
+#floating-tradingview-container .error-message button {
+    margin-top: 10px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#floating-tradingview-container .error-message button:hover {
+    background: #1976D2;
 }
 
 /* Minimized state */
