@@ -2,21 +2,22 @@
 (function () {
   "use strict";
 
-  // Check if already initialized to prevent duplicate instances
-  if (window.floatingTVInitialized) {
-    return;
-  }
-  window.floatingTVInitialized = true;
+  // Global widget instance - singleton pattern
+  let floatingWidget = null;
 
-  var floatingTV = {
-    isVisible: false,
-    isMinimized: false,
-    widget: null,
-    container: null,
-    chartContainer: null,
-    dragHandler: null,
-    resizeHandler: null,
-    settings: {
+  var FloatingTradingView = function (widgetId) {
+    this.widgetId = widgetId;
+    this.isVisible = false;
+    this.isMinimized = false;
+    this.widget = null;
+    this.container = null;
+    this.chartContainer = null;
+    this.dragHandler = null;
+    this.resizeHandler = null;
+    this.initialized = false;
+    this.lastWidgetLoad = 0;
+    this.isLoading = false;
+    this.settings = {
       symbol: "BTCUSD",
       interval: "D",
       theme: "dark",
@@ -26,575 +27,546 @@
       x: 100,
       y: 100,
       opacity: 1,
-    },
-
-    init: function () {
-      console.log("FloatingTradingView: Initializing...");
-      var self = this;
-
-      // Initialize drag and resize handlers
-      this.dragHandler = new DragHandler(this);
-      this.resizeHandler = new ResizeHandler(this);
-
-      // Request current global state from background
-      chrome.runtime.sendMessage(
-        { action: "getGlobalState" },
-        function (state) {
-          if (state) {
-            self.isVisible = state.isVisible;
-            self.isMinimized = state.isMinimized;
-            self.settings = state.settings;
-          }
-
-          // Create floating window
-          self.createFloatingWindow();
-
-          // Show widget if it was visible
-          if (self.isVisible) {
-            self.container.style.display = "block";
-            if (!self.widget) {
-              self.loadTradingViewWidget();
-            }
-          }
-
-          console.log("FloatingTradingView: Initialization complete");
-        }
-      );
-
-      // Listen for messages from popup and background
-      chrome.runtime.onMessage.addListener(function (
-        request,
-        sender,
-        sendResponse
-      ) {
-        console.log("FloatingTradingView: Received message", request);
-        self.handleMessage(request, sendResponse);
-        return true;
-      });
-
-      // Listen for keyboard shortcuts
-      document.addEventListener("keydown", function (e) {
-        if (e.ctrlKey && e.shiftKey && e.key === "F") {
-          e.preventDefault();
-          e.stopPropagation();
-          self.toggleVisibility();
-        }
-      });
-    },
-
-    createFloatingWindow: function () {
-      var self = this;
-
-      // Create container
-      this.container = document.createElement("div");
-      this.container.id = "floating-tradingview-container";
-      this.container.style.cssText =
-        "position: fixed;" +
-        "width: " +
-        this.settings.width +
-        "px;" +
-        "height: " +
-        this.settings.height +
-        "px;" +
-        "left: " +
-        this.settings.x +
-        "px;" +
-        "top: " +
-        this.settings.y +
-        "px;" +
-        "z-index: 999999;" +
-        "background: #131722;" +
-        "border: 1px solid #2a2e39;" +
-        "border-radius: 8px;" +
-        "box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);" +
-        "display: none;" +
-        "opacity: " +
-        this.settings.opacity +
-        ";" +
-        "transition: opacity 0.3s ease;";
-
-      // Create header
-      var header = document.createElement("div");
-      header.className = "ftv-header";
-      header.style.cssText =
-        "height: 35px;" +
-        "background: #131722;" +
-        "border-radius: 8px 8px 0 0;" +
-        "display: flex;" +
-        "align-items: center;" +
-        "justify-content: space-between;" +
-        "padding: 0 10px;" +
-        "cursor: move;" +
-        "user-select: none;" +
-        "-webkit-user-select: none;" +
-        "touch-action: none;";
-
-      // Title
-      var title = document.createElement("span");
-      title.textContent = "TradingView";
-      title.style.cssText =
-        "color: #d1d4dc;" +
-        "font-size: 14px;" +
-        'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' +
-        "pointer-events: none;";
-
-      // Controls
-      var controls = document.createElement("div");
-      controls.style.cssText = "display: flex; gap: 8px;";
-
-      // Minimize button
-      var minimizeBtn = this.createControlButton("−", function () {
-        self.toggleMinimize();
-      });
-
-      // Settings button
-      var settingsBtn = this.createControlButton("⚙", function () {
-        self.showSettings();
-      });
-
-      // Close button
-      var closeBtn = this.createControlButton("✕", function () {
-        self.toggleVisibility();
-      });
-
-      // Refresh button
-      var refreshBtn = this.createControlButton("↻", function () {
-        self.widget = null;
-        self.loadTradingViewWidget();
-      });
-
-      controls.appendChild(minimizeBtn);
-      controls.appendChild(refreshBtn);
-      controls.appendChild(settingsBtn);
-      controls.appendChild(closeBtn);
-      header.appendChild(title);
-      header.appendChild(controls);
-
-      // Chart container
-      this.chartContainer = document.createElement("div");
-      this.chartContainer.id = "tradingview-widget-container";
-      this.chartContainer.style.cssText =
-        "width: 100%;" +
-        "height: calc(100% - 35px);" +
-        "overflow: hidden;" +
-        "position: relative;" +
-        "background: #131722;";
-
-      // Resize handle
-      var resizeHandle = document.createElement("div");
-      resizeHandle.className = "ftv-resize-handle";
-      resizeHandle.style.cssText =
-        "position: absolute;" +
-        "bottom: 0;" +
-        "right: 0;" +
-        "width: 20px;" +
-        "height: 20px;" +
-        "cursor: nwse-resize;" +
-        "background: linear-gradient(135deg, transparent 50%, #2a2e39 50%);" +
-        "border-radius: 0 0 8px 0;" +
-        "touch-action: none;";
-
-      // Assemble container
-      this.container.appendChild(header);
-      this.container.appendChild(this.chartContainer);
-      this.container.appendChild(resizeHandle);
-      document.body.appendChild(this.container);
-
-      // Apply minimized state if needed
-      if (this.isMinimized) {
-        this.container.style.height = "35px";
-        this.chartContainer.style.display = "none";
-      }
-
-      // Set up drag and resize
-      this.dragHandler.attach(header);
-      this.resizeHandler.attach(resizeHandle);
-    },
-
-    createControlButton: function (text, onClick) {
-      var button = document.createElement("button");
-      button.textContent = text;
-      button.style.cssText =
-        "background: transparent;" +
-        "border: none;" +
-        "color: #d1d4dc;" +
-        "font-size: 18px;" +
-        "cursor: pointer;" +
-        "padding: 4px 8px;" +
-        "border-radius: 4px;" +
-        "transition: background 0.2s;";
-
-      button.onmouseover = function () {
-        button.style.background = "#2a2e39";
-      };
-      button.onmouseout = function () {
-        button.style.background = "transparent";
-      };
-      button.onclick = onClick;
-      return button;
-    },
-
-    toggleVisibility: function () {
-      console.log("FloatingTradingView: Toggling visibility");
-      this.isVisible = !this.isVisible;
-      this.container.style.display = this.isVisible ? "block" : "none";
-
-      if (this.isVisible && !this.widget) {
-        console.log("FloatingTradingView: Loading widget...");
-        this.loadTradingViewWidget();
-      }
-
-      // Update global state
-      this.updateGlobalState();
-    },
-
-    toggleMinimize: function () {
-      this.isMinimized = !this.isMinimized;
-      if (this.isMinimized) {
-        this.container.style.height = "35px";
-        this.chartContainer.style.display = "none";
-      } else {
-        this.container.style.height = this.settings.height + "px";
-        this.chartContainer.style.display = "block";
-      }
-
-      // Update global state
-      this.updateGlobalState();
-    },
-
-    showSettings: function () {
-      chrome.runtime.sendMessage({ action: "openSettings" });
-    },
-
-    loadTradingViewWidget: function () {
-      console.log("FloatingTradingView: Loading TradingView widget");
-      var self = this;
-      var retryCount = 0;
-      var maxRetries = 3;
-
-      function attemptLoad() {
-        // Clear existing content
-        self.chartContainer.innerHTML = "";
-
-        // Show loading indicator
-        var loadingDiv = document.createElement("div");
-        loadingDiv.style.cssText =
-          "position: absolute;" +
-          "top: 50%;" +
-          "left: 50%;" +
-          "transform: translate(-50%, -50%);" +
-          "color: #787b86;" +
-          "font-size: 14px;" +
-          'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
-        loadingDiv.textContent = "Loading chart...";
-        self.chartContainer.appendChild(loadingDiv);
-
-        // Create iframe
-        var iframe = document.createElement("iframe");
-        iframe.style.cssText =
-          "width: 100%;" +
-          "height: 100%;" +
-          "border: none;" +
-          "display: block;" +
-          "opacity: 0;" +
-          "transition: opacity 0.3s ease;";
-
-        // Set sandbox attributes to bypass CSP
-        iframe.setAttribute(
-          "sandbox",
-          "allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-        );
-
-        // Add error handling
-        var loadTimeout;
-        var hasLoaded = false;
-
-        iframe.onload = function () {
-          // Give the widget time to initialize
-          setTimeout(function () {
-            clearTimeout(loadTimeout);
-            hasLoaded = true;
-
-            // Remove loading indicator
-            if (loadingDiv.parentNode) {
-              loadingDiv.parentNode.removeChild(loadingDiv);
-            }
-
-            // Fade in the iframe
-            iframe.style.opacity = "1";
-            console.log(
-              "FloatingTradingView: Widget iframe loaded successfully"
-            );
-          }, 1000);
-        };
-
-        iframe.onerror = function () {
-          console.error("FloatingTradingView: Widget iframe failed to load");
-          handleLoadError();
-        };
-
-        // Set timeout for load
-        loadTimeout = setTimeout(function () {
-          if (!hasLoaded) {
-            console.error("FloatingTradingView: Widget load timeout");
-            handleLoadError();
-          }
-        }, 15000); // 15 second timeout
-
-        function handleLoadError() {
-          clearTimeout(loadTimeout);
-          retryCount++;
-
-          if (retryCount <= maxRetries) {
-            console.log(
-              "FloatingTradingView: Retrying load (attempt " + retryCount + ")"
-            );
-            setTimeout(attemptLoad, 2000);
-          } else {
-            // Show error message with reload button
-            self.chartContainer.innerHTML = "";
-            var errorDiv = document.createElement("div");
-            errorDiv.style.cssText =
-              "position: absolute;" +
-              "top: 50%;" +
-              "left: 50%;" +
-              "transform: translate(-50%, -50%);" +
-              "text-align: center;" +
-              "color: #787b86;" +
-              'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
-
-            var errorMsg = document.createElement("div");
-            errorMsg.textContent = "Failed to load TradingView";
-            errorMsg.style.marginBottom = "10px";
-
-            var reloadBtn = document.createElement("button");
-            reloadBtn.textContent = "Reload";
-            reloadBtn.style.cssText =
-              "background: #2196F3;" +
-              "color: white;" +
-              "border: none;" +
-              "padding: 8px 16px;" +
-              "border-radius: 4px;" +
-              "cursor: pointer;" +
-              "font-size: 14px;";
-            reloadBtn.onclick = function () {
-              retryCount = 0;
-              attemptLoad();
-            };
-
-            errorDiv.appendChild(errorMsg);
-            errorDiv.appendChild(reloadBtn);
-            self.chartContainer.appendChild(errorDiv);
-          }
-        }
-
-        // Create a blob URL instead of data URL for better compatibility
-        var widgetHtml =
-          "<!DOCTYPE html>\n" +
-          "<html>\n" +
-          "<head>\n" +
-          '<meta charset="utf-8">\n' +
-          '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
-          "<title>TradingView Widget</title>\n" +
-          "<style>\n" +
-          "html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: #131722; }\n" +
-          ".tradingview-widget-container { position: absolute; inset: 0; }\n" +
-          "#tradingview_widget { width: 100%; height: 100%; }\n" +
-          ".loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #787b86; font-family: sans-serif; }\n" +
-          "</style>\n" +
-          "</head>\n" +
-          "<body>\n" +
-          '<div class="loading">Initializing chart...</div>\n' +
-          '<div class="tradingview-widget-container">\n' +
-          '<div id="tradingview_widget"></div>\n' +
-          "</div>\n" +
-          '<script type="text/javascript">\n' +
-          "var scriptLoaded = false;\n" +
-          "var widgetCreated = false;\n" +
-          "function createWidget() {\n" +
-          "  if (widgetCreated) return;\n" +
-          "  try {\n" +
-          '    if (typeof TradingView !== "undefined" && TradingView.widget) {\n' +
-          '      document.querySelector(".loading").style.display = "none";\n' +
-          "      new TradingView.widget({\n" +
-          '        "autosize": true,\n' +
-          '        "symbol": "' +
-          self.settings.symbol +
-          '",\n' +
-          '        "interval": "' +
-          self.settings.interval +
-          '",\n' +
-          '        "timezone": "Etc/UTC",\n' +
-          '        "theme": "' +
-          self.settings.theme +
-          '",\n' +
-          '        "style": "' +
-          self.settings.style +
-          '",\n' +
-          '        "locale": "en",\n' +
-          '        "toolbar_bg": "#f1f3f6",\n' +
-          '        "enable_publishing": false,\n' +
-          '        "allow_symbol_change": true,\n' +
-          '        "container_id": "tradingview_widget",\n' +
-          '        "hide_side_toolbar": false,\n' +
-          '        "hide_top_toolbar": false,\n' +
-          '        "hide_legend": false,\n' +
-          '        "save_image": false,\n' +
-          '        "studies": [],\n' +
-          '        "show_popup_button": false\n' +
-          "      });\n" +
-          "      widgetCreated = true;\n" +
-          "    } else {\n" +
-          "      setTimeout(createWidget, 100);\n" +
-          "    }\n" +
-          "  } catch (e) {\n" +
-          '    console.error("Widget error:", e);\n' +
-          '    document.querySelector(".loading").textContent = "Error: " + e.message;\n' +
-          "  }\n" +
-          "}\n" +
-          "function loadScript() {\n" +
-          '  var script = document.createElement("script");\n' +
-          '  script.type = "text/javascript";\n' +
-          '  script.src = "https://s3.tradingview.com/tv.js";\n' +
-          "  script.onload = function() {\n" +
-          "    scriptLoaded = true;\n" +
-          "    setTimeout(createWidget, 500);\n" +
-          "  };\n" +
-          "  script.onerror = function() {\n" +
-          '    document.querySelector(".loading").textContent = "Failed to load TradingView library";\n' +
-          "  };\n" +
-          "  document.head.appendChild(script);\n" +
-          "}\n" +
-          'if (document.readyState === "loading") {\n' +
-          '  document.addEventListener("DOMContentLoaded", loadScript);\n' +
-          "} else {\n" +
-          "  loadScript();\n" +
-          "}\n" +
-          "</script>\n" +
-          "</body>\n" +
-          "</html>";
-
-        // Create blob URL
-        var blob = new Blob([widgetHtml], { type: "text/html" });
-        var blobUrl = URL.createObjectURL(blob);
-
-        // Set iframe source
-        iframe.src = blobUrl;
-
-        // Clean up blob URL after load
-        iframe.onload = function () {
-          setTimeout(function () {
-            URL.revokeObjectURL(blobUrl);
-          }, 1000);
-
-          // Call the original onload
-          setTimeout(function () {
-            clearTimeout(loadTimeout);
-            hasLoaded = true;
-
-            if (loadingDiv.parentNode) {
-              loadingDiv.parentNode.removeChild(loadingDiv);
-            }
-
-            iframe.style.opacity = "1";
-            console.log("FloatingTradingView: Widget loaded successfully");
-          }, 1000);
-        };
-
-        self.chartContainer.appendChild(iframe);
-        self.widget = iframe;
-      }
-
-      // Start loading
-      attemptLoad();
-    },
-
-    updateGlobalState: function () {
-      // Send state update to background script
-      chrome.runtime.sendMessage({
-        action: "updateGlobalState",
-        state: {
-          isVisible: this.isVisible,
-          isMinimized: this.isMinimized,
-          settings: this.settings,
-        },
-      });
-    },
-
-    handleMessage: function (request, sendResponse) {
-      switch (request.action) {
-        case "toggle":
-          if (request.hasOwnProperty("isVisible")) {
-            this.isVisible = request.isVisible;
-            this.container.style.display = this.isVisible ? "block" : "none";
-            if (this.isVisible && !this.widget) {
-              this.loadTradingViewWidget();
-            }
-          } else {
-            this.toggleVisibility();
-          }
-          sendResponse({ success: true });
-          break;
-
-        case "syncState":
-          // Sync with global state from other tabs
-          if (request.state) {
-            this.isVisible = request.state.isVisible;
-            this.isMinimized = request.state.isMinimized;
-            this.settings = request.state.settings;
-
-            // Update UI
-            this.container.style.display = this.isVisible ? "block" : "none";
-            this.container.style.left = this.settings.x + "px";
-            this.container.style.top = this.settings.y + "px";
-            this.container.style.width = this.settings.width + "px";
-            this.container.style.height = this.isMinimized
-              ? "35px"
-              : this.settings.height + "px";
-            this.container.style.opacity = this.settings.opacity;
-
-            if (this.isMinimized) {
-              this.chartContainer.style.display = "none";
-            } else {
-              this.chartContainer.style.display = "block";
-            }
-
-            // Load widget if needed
-            if (this.isVisible && !this.widget) {
-              this.loadTradingViewWidget();
-            }
-          }
-          break;
-
-        case "updateSettings":
-          Object.assign(this.settings, request.settings);
-          this.applySettings();
-          sendResponse({ success: true });
-          break;
-
-        case "getStatus":
-          sendResponse({ isVisible: this.isVisible, settings: this.settings });
-          break;
-
-        default:
-          sendResponse({ success: false });
-      }
-    },
-
-    applySettings: function () {
-      // Update opacity
-      this.container.style.opacity = this.settings.opacity;
-
-      // Reload widget with new settings
-      if (this.widget) {
-        // Clear the widget first
-        this.widget = null;
-        this.loadTradingViewWidget();
-      }
-    },
+    };
   };
 
-  // Professional Drag Handler
+  FloatingTradingView.prototype.init = function (state) {
+    if (this.initialized) {
+      return;
+    }
+
+    // Apply initial state
+    if (state) {
+      this.isVisible = state.isVisible;
+      this.isMinimized = state.isMinimized;
+      this.settings = state.settings;
+    }
+
+    // Initialize handlers
+    this.dragHandler = new DragHandler(this);
+    this.resizeHandler = new ResizeHandler(this);
+
+    // Create floating window
+    this.createFloatingWindow();
+
+    // Show widget if it was visible
+    if (this.isVisible) {
+      this.show();
+    }
+
+    this.initialized = true;
+  };
+
+  FloatingTradingView.prototype.createFloatingWindow = function () {
+    var self = this;
+
+    // Check if container already exists
+    if (this.container && this.container.parentNode) {
+      return;
+    }
+
+    // Create container with unique ID
+    this.container = document.createElement("div");
+    this.container.id = "floating-tradingview-container-" + this.widgetId;
+    this.container.className = "floating-tradingview-container";
+    this.container.setAttribute("data-widget-id", this.widgetId);
+    this.container.style.cssText =
+      "position: fixed;" +
+      "width: " +
+      this.settings.width +
+      "px;" +
+      "height: " +
+      this.settings.height +
+      "px;" +
+      "left: " +
+      this.settings.x +
+      "px;" +
+      "top: " +
+      this.settings.y +
+      "px;" +
+      "z-index: 999999;" +
+      "background: #131722;" +
+      "border: 1px solid #2a2e39;" +
+      "border-radius: 8px;" +
+      "box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);" +
+      "display: none;" +
+      "opacity: " +
+      this.settings.opacity +
+      ";" +
+      "transition: opacity 0.3s ease;";
+
+    // Create header
+    var header = document.createElement("div");
+    header.className = "ftv-header";
+    header.style.cssText =
+      "height: 35px;" +
+      "background: #131722;" +
+      "border-radius: 8px 8px 0 0;" +
+      "display: flex;" +
+      "align-items: center;" +
+      "justify-content: space-between;" +
+      "padding: 0 10px;" +
+      "cursor: move;" +
+      "user-select: none;" +
+      "-webkit-user-select: none;" +
+      "touch-action: none;";
+
+    // Title
+    var title = document.createElement("span");
+    title.textContent = "TradingView";
+    title.style.cssText =
+      "color: #d1d4dc;" +
+      "font-size: 14px;" +
+      'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' +
+      "pointer-events: none;";
+
+    // Controls
+    var controls = document.createElement("div");
+    controls.style.cssText = "display: flex; gap: 8px;";
+
+    // Minimize button
+    var minimizeBtn = this.createControlButton("−", function () {
+      self.toggleMinimize();
+    });
+
+    // Refresh button
+    var refreshBtn = this.createControlButton("↻", function () {
+      self.reloadWidget();
+    });
+
+    // Close button
+    var closeBtn = this.createControlButton("✕", function () {
+      // Send message to background to hide widget globally
+      chrome.runtime.sendMessage({
+        action: "toggleFromPopup"
+      });
+    });
+
+    controls.appendChild(minimizeBtn);
+    controls.appendChild(refreshBtn);
+    controls.appendChild(closeBtn);
+    header.appendChild(title);
+    header.appendChild(controls);
+
+    // Chart container
+    this.chartContainer = document.createElement("div");
+    this.chartContainer.className = "tradingview-widget-container";
+    this.chartContainer.style.cssText =
+      "width: 100%;" +
+      "height: calc(100% - 35px);" +
+      "overflow: hidden;" +
+      "position: relative;" +
+      "background: #131722;";
+
+    // Resize handle
+    var resizeHandle = document.createElement("div");
+    resizeHandle.className = "ftv-resize-handle";
+    resizeHandle.style.cssText =
+      "position: absolute;" +
+      "bottom: 0;" +
+      "right: 0;" +
+      "width: 20px;" +
+      "height: 20px;" +
+      "cursor: nwse-resize;" +
+      "background: linear-gradient(135deg, transparent 50%, #2a2e39 50%);" +
+      "border-radius: 0 0 8px 0;" +
+      "touch-action: none;";
+
+    // Assemble container
+    this.container.appendChild(header);
+    this.container.appendChild(this.chartContainer);
+    this.container.appendChild(resizeHandle);
+    document.body.appendChild(this.container);
+
+    // Apply minimized state if needed
+    if (this.isMinimized) {
+      this.container.style.height = "35px";
+      this.chartContainer.style.display = "none";
+    }
+
+    // Set up drag and resize
+    this.dragHandler.attach(header);
+    this.resizeHandler.attach(resizeHandle);
+  };
+
+  FloatingTradingView.prototype.createControlButton = function (text, onClick) {
+    var button = document.createElement("button");
+    button.textContent = text;
+    button.style.cssText =
+      "background: transparent;" +
+      "border: none;" +
+      "color: #d1d4dc;" +
+      "font-size: 18px;" +
+      "cursor: pointer;" +
+      "padding: 4px 8px;" +
+      "border-radius: 4px;" +
+      "transition: background 0.2s;";
+
+    button.onmouseover = function () {
+      button.style.background = "#2a2e39";
+    };
+    button.onmouseout = function () {
+      button.style.background = "transparent";
+    };
+    button.onclick = onClick;
+    return button;
+  };
+
+  FloatingTradingView.prototype.show = function () {
+    if (!this.container) return;
+
+    this.isVisible = true;
+    this.container.style.display = "block";
+
+    // Ensure widget is within viewport bounds
+    setTimeout(() => {
+      this.constrainToViewport();
+    }, 100);
+
+    // Load widget if not loaded yet
+    if (!this.widget || !this.lastWidgetLoad) {
+      this.loadTradingViewWidget();
+    }
+  };
+
+  FloatingTradingView.prototype.hide = function () {
+    if (!this.container) return;
+
+    this.isVisible = false;
+    this.container.style.display = "none";
+  };
+
+
+  FloatingTradingView.prototype.toggleMinimize = function () {
+    this.isMinimized = !this.isMinimized;
+    if (this.isMinimized) {
+      this.container.style.height = "35px";
+      this.chartContainer.style.display = "none";
+    } else {
+      this.container.style.height = this.settings.height + "px";
+      this.chartContainer.style.display = "block";
+    }
+
+    // Update global state
+    this.updateGlobalState();
+  };
+
+
+  FloatingTradingView.prototype.reloadWidget = function () {
+    this.widget = null;
+    this.loadTradingViewWidget();
+  };
+
+  FloatingTradingView.prototype.loadTradingViewWidget = function () {
+    var self = this;
+
+    // Prevent multiple simultaneous loads
+    if (this.isLoading) return;
+    this.isLoading = true;
+
+    // Clear existing content
+    this.chartContainer.innerHTML = "";
+
+    // Show loading indicator
+    var loadingDiv = document.createElement("div");
+    loadingDiv.style.cssText =
+      "position: absolute;" +
+      "top: 50%;" +
+      "left: 50%;" +
+      "transform: translate(-50%, -50%);" +
+      "color: #787b86;" +
+      "font-size: 14px;" +
+      "text-align: center;" +
+      'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
+    loadingDiv.textContent = "Loading TradingView chart...";
+    this.chartContainer.appendChild(loadingDiv);
+
+    // Create widget container for direct embedding
+    var widgetContainer = document.createElement("div");
+    widgetContainer.id = "tradingview_widget_" + Date.now();
+    widgetContainer.style.cssText = 
+      "width: 100%;" +
+      "height: 100%;" +
+      "position: relative;";
+
+    this.chartContainer.appendChild(widgetContainer);
+
+    // Try multiple approaches in sequence
+    var attempts = 0;
+    var maxAttempts = 3;
+    
+    function tryNext() {
+      attempts++;
+      
+      if (attempts === 1) {
+        // First: Try lightweight widget
+        loadingDiv.textContent = "Loading TradingView widget...";
+        self.tryLightweightWidget(loadingDiv, tryNext);
+      } else if (attempts === 2) {
+        // Second: Try direct widget
+        loadingDiv.textContent = "Loading chart (method 2)...";
+        self.loadTradingViewScript(function() {
+          self.createDirectWidget(widgetContainer, loadingDiv);
+        }, tryNext);
+      } else {
+        // Final: Fallback display
+        loadingDiv.textContent = "Loading fallback display...";
+        self.loadFallbackWidget(loadingDiv, null);
+      }
+    }
+    
+    tryNext();
+  };
+
+  FloatingTradingView.prototype.loadTradingViewScript = function(onSuccess, onError) {
+    var self = this;
+    
+    // Check if TradingView is already loaded
+    if (typeof window.TradingView !== 'undefined' && window.TradingView.widget) {
+      onSuccess();
+      return;
+    }
+
+    // Try to load TradingView script
+    var script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.async = true;
+    
+    var timeout = setTimeout(function() {
+      onError();
+    }, 10000);
+
+    script.onload = function() {
+      clearTimeout(timeout);
+      // Wait a bit for TradingView to fully initialize
+      setTimeout(function() {
+        if (typeof window.TradingView !== 'undefined' && window.TradingView.widget) {
+          onSuccess();
+        } else {
+          onError();
+        }
+      }, 500);
+    };
+
+    script.onerror = function() {
+      clearTimeout(timeout);
+      onError();
+    };
+
+    document.head.appendChild(script);
+  };
+
+  FloatingTradingView.prototype.createDirectWidget = function(container, loadingDiv) {
+    var self = this;
+
+    try {
+      // Create TradingView widget directly
+      new window.TradingView.widget({
+        width: '100%',
+        height: '100%',
+        symbol: this.settings.symbol,
+        interval: this.settings.interval,
+        timezone: "Etc/UTC",
+        theme: this.settings.theme,
+        style: this.settings.style.toString(),
+        locale: "en",
+        toolbar_bg: this.settings.theme === 'dark' ? "#131722" : "#f1f3f6",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        hideideas: true,
+        hide_top_toolbar: false,
+        hide_legend: false,
+        save_image: false,
+        container_id: container.id,
+        onChartReady: function() {
+          if (loadingDiv && loadingDiv.parentNode) {
+            loadingDiv.parentNode.removeChild(loadingDiv);
+          }
+          self.widget = container;
+          self.lastWidgetLoad = Date.now();
+          self.isLoading = false;
+        }
+      });
+    } catch (error) {
+      console.error('Direct TradingView widget creation failed:', error);
+      this.loadFallbackWidget(loadingDiv);
+    }
+  };
+
+  FloatingTradingView.prototype.loadFallbackWidget = function(loadingDiv) {
+    var self = this;
+
+    // Try lightweight widget approach first
+    this.tryLightweightWidget(loadingDiv, function() {
+      // If lightweight widget fails, show minimal chart info
+      loadingDiv.innerHTML = 
+        '<div style="text-align: center; color: #787b86; padding: 20px;">' +
+        '<div style="margin-bottom: 15px; font-size: 16px; color: #d1d4dc;">' + self.settings.symbol + '</div>' +
+        '<div style="font-size: 12px; margin-bottom: 5px;">Interval: ' + self.settings.interval + '</div>' +
+        '<div style="font-size: 12px; margin-bottom: 15px;">Theme: ' + self.settings.theme + '</div>' +
+        '<div style="margin: 15px 0; font-size: 11px; opacity: 0.8;">Chart loading restricted by website security policy</div>' +
+        '<button onclick="window.open(\'https://www.tradingview.com/chart/?symbol=' + 
+        encodeURIComponent(self.settings.symbol) + 
+        '&interval=' + encodeURIComponent(self.settings.interval) +
+        '\', \'_blank\')" style="margin:10px 5px;padding:8px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Open in TradingView</button>' +
+        '<button onclick="location.reload()" style="margin:10px 5px;padding:8px 12px;background:#666;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Retry</button>' +
+        '</div>';
+      
+      self.widget = loadingDiv;
+      self.isLoading = false;
+    });
+  };
+
+  FloatingTradingView.prototype.tryLightweightWidget = function(loadingDiv, onFallback) {
+    var self = this;
+
+    try {
+      // Create TradingView widget HTML structure
+      var widgetHtml = 
+        '<div class="tradingview-widget-container" style="width: 100%; height: 100%;">' +
+        '<div class="tradingview-widget-container__widget" style="width: 100%; height: 100%;"></div>' +
+        '</div>';
+
+      // Create script element for TradingView widget
+      var scriptContent = {
+        "width": "100%",
+        "height": "100%",
+        "symbol": this.settings.symbol,
+        "interval": this.settings.interval,
+        "timezone": "Etc/UTC",
+        "theme": this.settings.theme,
+        "style": this.settings.style.toString(),
+        "locale": "en",
+        "enable_publishing": false,
+        "backgroundColor": this.settings.theme === 'dark' ? "#131722" : "#ffffff",
+        "gridColor": this.settings.theme === 'dark' ? "#2A2E39" : "#e1ecf4",
+        "hide_top_toolbar": false,
+        "hide_legend": false,
+        "save_image": false,
+        "calendar": false,
+        "support_host": "https://www.tradingview.com"
+      };
+
+      // Clear existing content and add widget HTML
+      this.chartContainer.innerHTML = widgetHtml;
+      
+      var script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+      script.async = true;
+      script.text = JSON.stringify(scriptContent);
+
+      // Add script to widget container
+      var widgetContainer = this.chartContainer.querySelector('.tradingview-widget-container');
+      if (widgetContainer) {
+        widgetContainer.appendChild(script);
+      }
+
+      // Hide loading div initially
+      if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+      }
+
+      // Check for successful loading with multiple attempts
+      var checkCount = 0;
+      var checkInterval = setInterval(function() {
+        checkCount++;
+        
+        var iframe = self.chartContainer.querySelector('iframe');
+        if (iframe && iframe.src && iframe.src.includes('tradingview.com')) {
+          clearInterval(checkInterval);
+          self.widget = widgetContainer;
+          self.lastWidgetLoad = Date.now();
+          self.isLoading = false;
+          console.log('TradingView lightweight widget loaded successfully');
+          return;
+        }
+        
+        // Give up after 10 seconds (20 checks)
+        if (checkCount >= 20) {
+          clearInterval(checkInterval);
+          if (loadingDiv) {
+            loadingDiv.style.display = 'block';
+          }
+          console.log('TradingView lightweight widget failed to load, trying fallback');
+          if (onFallback) onFallback();
+        }
+      }, 500);
+
+    } catch (error) {
+      console.error('Lightweight widget setup failed:', error);
+      if (onFallback) onFallback();
+    }
+  };
+
+  FloatingTradingView.prototype.updateGlobalState = function () {
+    // Send state update to background script (only from active widget)
+    chrome.runtime.sendMessage({
+      action: "updateGlobalState",
+      widgetId: this.widgetId,
+      state: {
+        isVisible: this.isVisible,
+        isMinimized: this.isMinimized,
+        settings: this.settings,
+      },
+    }).catch(function(error) {
+      // Handle connection errors gracefully
+    });
+  };
+
+
+  FloatingTradingView.prototype.constrainToViewport = function () {
+    if (!this.container) return;
+
+    var rect = this.container.getBoundingClientRect();
+    var viewportWidth = window.innerWidth;
+    var viewportHeight = window.innerHeight;
+    
+    var newX = this.settings.x;
+    var newY = this.settings.y;
+    var changed = false;
+
+    // Ensure widget doesn't go off screen horizontally
+    if (rect.right > viewportWidth) {
+      newX = viewportWidth - this.settings.width - 20;
+      changed = true;
+    }
+    if (newX < 0) {
+      newX = 20;
+      changed = true;
+    }
+
+    // Ensure widget doesn't go off screen vertically
+    if (rect.bottom > viewportHeight) {
+      newY = viewportHeight - this.settings.height - 20;
+      changed = true;
+    }
+    if (newY < 0) {
+      newY = 20;
+      changed = true;
+    }
+
+    // Apply new position if changed
+    if (changed) {
+      this.settings.x = newX;
+      this.settings.y = newY;
+      this.container.style.left = newX + "px";
+      this.container.style.top = newY + "px";
+      this.updateGlobalState();
+    }
+  };
+
+  FloatingTradingView.prototype.destroy = function () {
+    if (this.container && this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+    }
+    this.container = null;
+    this.widget = null;
+    this.initialized = false;
+  };
+
+  // Drag Handler
   function DragHandler(parent) {
     this.parent = parent;
     this.element = null;
@@ -606,7 +578,6 @@
     this.xOffset = 0;
     this.yOffset = 0;
 
-    // Bind methods
     this.handleStart = this.handleStart.bind(this);
     this.handleMove = this.handleMove.bind(this);
     this.handleEnd = this.handleEnd.bind(this);
@@ -614,46 +585,29 @@
 
   DragHandler.prototype.attach = function (element) {
     this.element = element;
-
-    // Use pointer events for better performance
-    if (window.PointerEvent) {
-      this.element.addEventListener("pointerdown", this.handleStart);
-    } else {
-      this.element.addEventListener("mousedown", this.handleStart);
-      this.element.addEventListener("touchstart", this.handleStart);
-    }
+    this.element.addEventListener("mousedown", this.handleStart);
+    this.element.addEventListener("touchstart", this.handleStart, {
+      passive: false,
+    });
   };
 
   DragHandler.prototype.handleStart = function (e) {
     if (e.target.closest("button")) return;
 
-    // Get initial positions
+    var clientX = e.type === "touchstart" ? e.touches[0].clientX : e.clientX;
+    var clientY = e.type === "touchstart" ? e.touches[0].clientY : e.clientY;
+
     var rect = this.parent.container.getBoundingClientRect();
-    this.initialX = e.clientX || e.touches[0].clientX;
-    this.initialY = e.clientY || e.touches[0].clientY;
-    this.xOffset = this.initialX - rect.left;
-    this.yOffset = this.initialY - rect.top;
+    this.xOffset = clientX - rect.left;
+    this.yOffset = clientY - rect.top;
 
     this.active = true;
-
-    // Disable transitions
     this.parent.container.style.transition = "none";
-    this.parent.container.classList.add("dragging");
 
-    // Set capture for reliable tracking
-    if (e.type === "pointerdown") {
-      this.element.setPointerCapture(e.pointerId);
-      document.addEventListener("pointermove", this.handleMove);
-      document.addEventListener("pointerup", this.handleEnd);
-    } else if (e.type === "mousedown") {
-      document.addEventListener("mousemove", this.handleMove);
-      document.addEventListener("mouseup", this.handleEnd);
-    } else if (e.type === "touchstart") {
-      document.addEventListener("touchmove", this.handleMove, {
-        passive: false,
-      });
-      document.addEventListener("touchend", this.handleEnd);
-    }
+    document.addEventListener("mousemove", this.handleMove);
+    document.addEventListener("mouseup", this.handleEnd);
+    document.addEventListener("touchmove", this.handleMove, { passive: false });
+    document.addEventListener("touchend", this.handleEnd);
 
     e.preventDefault();
   };
@@ -663,44 +617,37 @@
 
     e.preventDefault();
 
-    this.currentX = (e.clientX || e.touches[0].clientX) - this.xOffset;
-    this.currentY = (e.clientY || e.touches[0].clientY) - this.yOffset;
+    var clientX = e.type === "touchmove" ? e.touches[0].clientX : e.clientX;
+    var clientY = e.type === "touchmove" ? e.touches[0].clientY : e.clientY;
 
-    // Constrain to viewport
-    var maxX = window.innerWidth - this.parent.container.offsetWidth;
-    var maxY = window.innerHeight - this.parent.container.offsetHeight;
+    this.currentX = clientX - this.xOffset;
+    this.currentY = clientY - this.yOffset;
 
-    this.currentX = Math.max(0, Math.min(this.currentX, maxX));
-    this.currentY = Math.max(0, Math.min(this.currentY, maxY));
+    // Constrain to viewport with margins
+    var margin = 20;
+    var containerWidth = this.parent.container.offsetWidth;
+    var containerHeight = this.parent.container.offsetHeight;
+    var maxX = window.innerWidth - containerWidth - margin;
+    var maxY = window.innerHeight - containerHeight - margin;
 
-    // Apply position
+    this.currentX = Math.max(margin, Math.min(this.currentX, maxX));
+    this.currentY = Math.max(margin, Math.min(this.currentY, maxY));
+
     this.parent.container.style.left = this.currentX + "px";
     this.parent.container.style.top = this.currentY + "px";
   };
 
-  DragHandler.prototype.handleEnd = function (e) {
+  DragHandler.prototype.handleEnd = function () {
     if (!this.active) return;
 
     this.active = false;
 
-    // Release capture
-    if (e.type === "pointerup" && this.element.releasePointerCapture) {
-      this.element.releasePointerCapture(e.pointerId);
-    }
-
-    // Remove event listeners
-    document.removeEventListener("pointermove", this.handleMove);
-    document.removeEventListener("pointerup", this.handleEnd);
     document.removeEventListener("mousemove", this.handleMove);
     document.removeEventListener("mouseup", this.handleEnd);
     document.removeEventListener("touchmove", this.handleMove);
     document.removeEventListener("touchend", this.handleEnd);
 
-    // Re-enable transitions
-    setTimeout(() => {
-      this.parent.container.style.transition = "opacity 0.3s ease";
-      this.parent.container.classList.remove("dragging");
-    }, 0);
+    this.parent.container.style.transition = "opacity 0.3s ease";
 
     // Save position
     this.parent.settings.x = parseInt(this.parent.container.style.left, 10);
@@ -708,7 +655,7 @@
     this.parent.updateGlobalState();
   };
 
-  // Professional Resize Handler
+  // Resize Handler
   function ResizeHandler(parent) {
     this.parent = parent;
     this.element = null;
@@ -718,7 +665,6 @@
     this.startWidth = 0;
     this.startHeight = 0;
 
-    // Bind methods
     this.handleStart = this.handleStart.bind(this);
     this.handleMove = this.handleMove.bind(this);
     this.handleEnd = this.handleEnd.bind(this);
@@ -726,42 +672,28 @@
 
   ResizeHandler.prototype.attach = function (element) {
     this.element = element;
-
-    // Use pointer events for better performance
-    if (window.PointerEvent) {
-      this.element.addEventListener("pointerdown", this.handleStart);
-    } else {
-      this.element.addEventListener("mousedown", this.handleStart);
-      this.element.addEventListener("touchstart", this.handleStart);
-    }
+    this.element.addEventListener("mousedown", this.handleStart);
+    this.element.addEventListener("touchstart", this.handleStart, {
+      passive: false,
+    });
   };
 
   ResizeHandler.prototype.handleStart = function (e) {
-    this.startX = e.clientX || e.touches[0].clientX;
-    this.startY = e.clientY || e.touches[0].clientY;
+    var clientX = e.type === "touchstart" ? e.touches[0].clientX : e.clientX;
+    var clientY = e.type === "touchstart" ? e.touches[0].clientY : e.clientY;
+
+    this.startX = clientX;
+    this.startY = clientY;
     this.startWidth = parseInt(this.parent.container.style.width, 10);
     this.startHeight = parseInt(this.parent.container.style.height, 10);
 
     this.active = true;
-
-    // Disable transitions
     this.parent.container.style.transition = "none";
-    this.parent.container.classList.add("resizing");
 
-    // Set capture for reliable tracking
-    if (e.type === "pointerdown") {
-      this.element.setPointerCapture(e.pointerId);
-      document.addEventListener("pointermove", this.handleMove);
-      document.addEventListener("pointerup", this.handleEnd);
-    } else if (e.type === "mousedown") {
-      document.addEventListener("mousemove", this.handleMove);
-      document.addEventListener("mouseup", this.handleEnd);
-    } else if (e.type === "touchstart") {
-      document.addEventListener("touchmove", this.handleMove, {
-        passive: false,
-      });
-      document.addEventListener("touchend", this.handleEnd);
-    }
+    document.addEventListener("mousemove", this.handleMove);
+    document.addEventListener("mouseup", this.handleEnd);
+    document.addEventListener("touchmove", this.handleMove, { passive: false });
+    document.addEventListener("touchend", this.handleEnd);
 
     e.preventDefault();
   };
@@ -771,47 +703,42 @@
 
     e.preventDefault();
 
-    var currentX = e.clientX || e.touches[0].clientX;
-    var currentY = e.clientY || e.touches[0].clientY;
+    var clientX = e.type === "touchmove" ? e.touches[0].clientX : e.clientX;
+    var clientY = e.type === "touchmove" ? e.touches[0].clientY : e.clientY;
 
-    var newWidth = this.startWidth + (currentX - this.startX);
-    var newHeight = this.startHeight + (currentY - this.startY);
+    var newWidth = this.startWidth + (clientX - this.startX);
+    var newHeight = this.startHeight + (clientY - this.startY);
 
     // Apply constraints
     var containerRect = this.parent.container.getBoundingClientRect();
-    var maxWidth = window.innerWidth - containerRect.left - 20;
-    var maxHeight = window.innerHeight - containerRect.top - 20;
+    var margin = 20;
+    var maxWidth = window.innerWidth - containerRect.left - margin;
+    var maxHeight = window.innerHeight - containerRect.top - margin;
 
-    newWidth = Math.max(300, Math.min(newWidth, maxWidth));
-    newHeight = Math.max(200, Math.min(newHeight, maxHeight));
+    // Minimum and maximum size constraints
+    var minWidth = 300;
+    var minHeight = 200;
+    var maxWidthLimit = Math.min(maxWidth, 1200); // Cap at reasonable size
+    var maxHeightLimit = Math.min(maxHeight, 800);
+
+    newWidth = Math.max(minWidth, Math.min(newWidth, maxWidthLimit));
+    newHeight = Math.max(minHeight, Math.min(newHeight, maxHeightLimit));
 
     this.parent.container.style.width = newWidth + "px";
     this.parent.container.style.height = newHeight + "px";
   };
 
-  ResizeHandler.prototype.handleEnd = function (e) {
+  ResizeHandler.prototype.handleEnd = function () {
     if (!this.active) return;
 
     this.active = false;
 
-    // Release capture
-    if (e.type === "pointerup" && this.element.releasePointerCapture) {
-      this.element.releasePointerCapture(e.pointerId);
-    }
-
-    // Remove event listeners
-    document.removeEventListener("pointermove", this.handleMove);
-    document.removeEventListener("pointerup", this.handleEnd);
     document.removeEventListener("mousemove", this.handleMove);
     document.removeEventListener("mouseup", this.handleEnd);
     document.removeEventListener("touchmove", this.handleMove);
     document.removeEventListener("touchend", this.handleEnd);
 
-    // Re-enable transitions
-    setTimeout(() => {
-      this.parent.container.style.transition = "opacity 0.3s ease";
-      this.parent.container.classList.remove("resizing");
-    }, 0);
+    this.parent.container.style.transition = "opacity 0.3s ease";
 
     // Save size
     this.parent.settings.width = parseInt(
@@ -825,9 +752,106 @@
     this.parent.updateGlobalState();
   };
 
-  // Initialize
-  floatingTV.init();
+  // Message handler
+  chrome.runtime.onMessage.addListener(function (
+    request,
+    sender,
+    sendResponse
+  ) {
 
-  // Make it accessible for debugging
-  window.floatingTV = floatingTV;
+    var widgetId = request.widgetId;
+
+    switch (request.action) {
+      case "createWidget":
+        // Create the global widget (destroy any existing first)
+        if (floatingWidget) {
+          floatingWidget.destroy();
+          floatingWidget = null;
+        }
+
+        if (widgetId) {
+          floatingWidget = new FloatingTradingView(widgetId);
+          floatingWidget.init(request.state);
+          floatingWidget.show();
+        }
+        sendResponse({ success: true });
+        break;
+
+      case "destroyWidget":
+        // Destroy the global widget
+        if (floatingWidget) {
+          floatingWidget.destroy();
+          floatingWidget = null;
+        }
+        sendResponse({ success: true });
+        break;
+
+      case "updateSettings":
+        // Update settings for the widget
+        if (floatingWidget && floatingWidget.widgetId === widgetId) {
+          Object.assign(floatingWidget.settings, request.settings);
+          floatingWidget.container.style.opacity = floatingWidget.settings.opacity;
+          
+          // Only reload if symbol or interval changed
+          var needsReload = false;
+          if (floatingWidget.widget && floatingWidget.widget.src) {
+            var currentUrl = new URL(floatingWidget.widget.src);
+            var currentSymbol = currentUrl.searchParams.get("symbol");
+            var currentInterval = currentUrl.searchParams.get("interval");
+
+            if (currentSymbol !== floatingWidget.settings.symbol ||
+                currentInterval !== floatingWidget.settings.interval) {
+              needsReload = true;
+            }
+          }
+
+          if (needsReload) {
+            floatingWidget.reloadWidget();
+          }
+        }
+        sendResponse({ success: true });
+        break;
+
+      case "getStatus":
+        // Get status of the widget
+        if (floatingWidget) {
+          sendResponse({
+            isVisible: floatingWidget.isVisible,
+            settings: floatingWidget.settings,
+            widgetId: floatingWidget.widgetId,
+          });
+        } else {
+          sendResponse({ isVisible: false });
+        }
+        break;
+
+      default:
+        sendResponse({ success: false });
+    }
+
+    return true;
+  });
+
+
+  // Handle page visibility changes to prevent resource waste
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && floatingWidget) {
+      // Page is hidden, widget will remain but won't update while hidden
+    }
+  });
+
+  // Handle window resize to reposition widget within viewport bounds
+  window.addEventListener("resize", function() {
+    if (floatingWidget && floatingWidget.container && floatingWidget.isVisible) {
+      floatingWidget.constrainToViewport();
+    }
+  });
+
+  // Clean up on page unload
+  window.addEventListener("beforeunload", function () {
+    if (floatingWidget) {
+      floatingWidget.destroy();
+      floatingWidget = null;
+    }
+  });
 })();

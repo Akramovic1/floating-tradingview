@@ -1,6 +1,11 @@
 /* Styles for Floating TradingView Extension */
 
-/* Ensure the floating window stays on top */
+/* Ensure the floating window stays on top - use attribute selector for dynamic IDs */
+[id^="floating-tradingview-container"] {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Also support the base selector for backwards compatibility */
 #floating-tradingview-container {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
@@ -18,25 +23,8 @@
     transition: height 0.3s ease, opacity 0.3s ease;
 }
 
-/* Ensure TradingView widget fills container */
-#floating-tradingview-container #tradingview-widget-container {
-    position: relative;
-    height: calc(100% - 35px);
-    width: 100%;
-}
-
-#floating-tradingview-container #tradingview-widget-container iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border: none;
-    display: block;
-}
-
 /* Hide scrollbars in widget container */
-#floating-tradingview-container #tradingview-widget-container::-webkit-scrollbar {
+#floating-tradingview-container .tradingview-widget-container::-webkit-scrollbar {
     display: none;
 }
 
@@ -98,20 +86,49 @@
     outline-offset: 2px;
 }
 
-/* Ensure proper layering */
-#floating-tradingview-container * {
-    box-sizing: border-box;
-}
 
-/* Prevent conflicts with page styles */
-#floating-tradingview-container,
-#floating-tradingview-container * {
-    all: initial;
+/* Prevent conflicts with page styles - more targeted approach */
+#floating-tradingview-container {
+    all: unset !important;
+    position: fixed !important;
+    z-index: 999999 !important;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    box-sizing: border-box !important;
+    display: block !important;
 }
 
-/* Fix for iframe sizing */
-#floating-tradingview-container #tradingview-widget-container {
+/* Reset critical properties for child elements without breaking functionality */
+#floating-tradingview-container *:not(iframe):not(iframe *) {
+    box-sizing: border-box !important;
+    font-family: inherit !important;
+}
+
+/* Protect against common CSS conflicts */
+[id^="floating-tradingview-container"] {
+    transform: none !important;
+    filter: none !important;
+    clip: none !important;
+    clip-path: none !important;
+    mask: none !important;
+    visibility: visible !important;
+    max-width: none !important;
+    max-height: none !important;
+    min-width: 300px !important;
+    min-height: 200px !important;
+    overflow: visible !important;
+    white-space: normal !important;
+}
+
+/* Ensure widget doesn't inherit problematic styles */
+[id^="floating-tradingview-container"] * {
+    line-height: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    text-decoration: none !important;
+}
+
+/* Consolidated iframe sizing rules */
+#floating-tradingview-container .tradingview-widget-container {
     position: relative;
     height: calc(100% - 35px);
     width: 100%;
@@ -119,7 +136,7 @@
     background: #131722;
 }
 
-#floating-tradingview-container #tradingview-widget-container iframe {
+#floating-tradingview-container .tradingview-widget-container iframe {
     position: absolute;
     top: 0;
     left: 0;
@@ -130,14 +147,10 @@
     max-width: 100%;
     max-height: 100%;
     pointer-events: auto;
-}
-
-/* Ensure iframe has no borders or margins */
-#floating-tradingview-container iframe {
     margin: 0;
     padding: 0;
-    overflow: hidden;
 }
+
 
 /* Prevent drag issues */
 #floating-tradingview-container {

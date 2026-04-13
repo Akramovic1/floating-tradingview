@@ -111,25 +111,43 @@
       function checkExtension() {
         updateDebugInfo("Checking extension...");
 
-        // Check if content script is loaded
-        if (window.floatingTV) {
-          updateDebugInfo("✅ Content script is loaded");
-          updateDebugInfo("Widget visible: " + window.floatingTV.isVisible);
-        } else {
-          updateDebugInfo("❌ Content script not found");
-          updateDebugInfo("Try refreshing the page or reloading the extension");
-        }
-
-        // Check for container
-        const container = document.getElementById(
-          "floating-tradingview-container"
-        );
+        // Check for container (new structure uses dynamic IDs)
+        const container = document.querySelector('[id^="floating-tradingview-container"]');
         if (container) {
           updateDebugInfo("✅ Widget container exists");
           updateDebugInfo("Display: " + container.style.display);
+          updateDebugInfo("Container ID: " + container.id);
+          
+          // Check for TradingView widget inside
+          const tradingviewWidget = container.querySelector('.tradingview-widget-container');
+          if (tradingviewWidget) {
+            updateDebugInfo("✅ TradingView widget container found");
+            
+            const iframe = tradingviewWidget.querySelector('iframe');
+            if (iframe) {
+              updateDebugInfo("✅ TradingView iframe loaded");
+              updateDebugInfo("Iframe src: " + iframe.src.substring(0, 50) + "...");
+            } else {
+              updateDebugInfo("❌ TradingView iframe not found");
+            }
+          } else {
+            updateDebugInfo("❌ TradingView widget container not found");
+          }
         } else {
           updateDebugInfo("❌ Widget container not found");
+          updateDebugInfo("Try clicking the extension icon or pressing Ctrl+Shift+F");
         }
+
+        // Check if extension is installed
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+          updateDebugInfo("✅ Chrome extension environment detected");
+        } else {
+          updateDebugInfo("❌ Extension environment not detected");
+        }
+
+        // Check for CSP issues
+        updateDebugInfo("Current URL: " + window.location.href);
+        updateDebugInfo("User Agent: " + navigator.userAgent.substring(0, 50) + "...");
       }
 
       function openConsole() {
@@ -139,12 +157,8 @@
       }
 
       function manualToggle() {
-        if (window.floatingTV) {
-          window.floatingTV.toggleVisibility();
-          updateDebugInfo("Toggled widget visibility");
-        } else {
-          updateDebugInfo("❌ Cannot toggle - content script not loaded");
-        }
+        updateDebugInfo("Manual toggle no longer available - use extension popup or keyboard shortcut");
+        updateDebugInfo("Click the extension icon in the toolbar or press Ctrl+Shift+F");
       }
 
       // Auto-check on load

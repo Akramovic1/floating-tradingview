@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floating TradingView</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #131722;
+            color: #d1d4dc;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        .main-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            height: 35px;
+            background: #131722;
+            border-bottom: 1px solid #2a2e39;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-app-region: drag;
+        }
+
+        .title {
+            color: #d1d4dc;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 5px;
+            -webkit-app-region: no-drag;
+        }
+
+        .control-btn {
+            background: transparent;
+            border: none;
+            color: #d1d4dc;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            -webkit-app-region: no-drag;
+        }
+
+        .control-btn:hover {
+            background: #2a2e39;
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            background: #131722;
+            overflow: hidden;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #787b86;
+            font-size: 14px;
+        }
+
+        .settings-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(19, 23, 34, 0.95);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+        }
+
+        .settings-content {
+            padding: 20px;
+            max-width: 400px;
+            margin: auto;
+            background: #1e222d;
+            border-radius: 8px;
+            border: 1px solid #2a2e39;
+        }
+
+        .settings-title {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 5px;
+            color: #787b86;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #131722;
+            border: 1px solid #2a2e39;
+            border-radius: 4px;
+            color: #d1d4dc;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            background: #2196f3;
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #1976d2;
+        }
+
+        .btn.secondary {
+            background: #2a2e39;
+        }
+
+        .btn.secondary:hover {
+            background: #363a45;
+        }
+
+        .error-message {
+            background: #131722;
+            padding: 20px;
+            text-align: center;
+            color: #787b86;
+        }
+
+        .error-message h3 {
+            color: #d1d4dc;
+            margin-bottom: 10px;
+        }
+
+        .error-message button {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .error-message button:hover {
+            background: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="header">
+            <div class="title">TradingView</div>
+            <div class="controls">
+                <button class="control-btn" id="settingsBtn" title="Settings">⚙</button>
+                <button class="control-btn" id="minimizeBtn" title="Minimize">−</button>
+                <button class="control-btn" id="closeBtn" title="Close">✕</button>
+            </div>
+        </div>
+        
+        <div class="chart-container" id="chartContainer">
+            <div class="loading" id="loadingIndicator">Loading TradingView chart...</div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-content">
+                <h2 class="settings-title">Chart Settings</h2>
+                
+                <div class="form-group">
+                    <label for="symbolInput">Symbol</label>
+                    <input type="text" id="symbolInput" placeholder="e.g., BTCUSD, AAPL, EURUSD">
+                </div>
+
+                <div class="form-group">
+                    <label for="intervalSelect">Time Interval</label>
+                    <select id="intervalSelect">
+                        <option value="1">1 Minute</option>
+                        <option value="5">5 Minutes</option>
+                        <option value="15">15 Minutes</option>
+                        <option value="30">30 Minutes</option>
+                        <option value="60">1 Hour</option>
+                        <option value="240">4 Hours</option>
+                        <option value="D">Daily</option>
+                        <option value="W">Weekly</option>
+                        <option value="M">Monthly</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="themeSelect">Theme</label>
+                    <select id="themeSelect">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="styleSelect">Chart Style</label>
+                    <select id="styleSelect">
+                        <option value="0">Candles</option>
+                        <option value="1">Bars</option>
+                        <option value="2">Line</option>
+                        <option value="3">Area</option>
+                        <option value="8">Heikin Ashi</option>
+                        <option value="9">Hollow Candles</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn" id="saveSettingsBtn">Save & Apply</button>
+                    <button class="btn secondary" id="cancelSettingsBtn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

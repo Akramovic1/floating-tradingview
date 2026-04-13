@@ -1,8 +1,8 @@
-![Extension Icon](icons/icon128.png)
+![Application Icon](icons/icon128.png)
 
-# Floating TradingView Chrome Extension
+# Floating TradingView Desktop
 
-A Chrome extension that creates a floating, resizable TradingView widget that stays on top of your browser content, allowing you to monitor markets while working.
+A cross-platform desktop application for viewing cryptocurrency and stock charts in a floating window while working. Built with Electron, works on Windows, macOS, and Linux.
 
 ## Screenshot
 
@@ -12,94 +12,167 @@ _The floating TradingView widget in action - draggable, resizable, and always on
 
 ## Features
 
-- 📊 **Floating Widget**: Draggable and resizable TradingView chart that floats above web content
-- 💾 **Persistent Settings**: Saves position, size, and preferences across sessions
-- ⌨️ **Keyboard Shortcuts**: Toggle visibility with `Ctrl+Shift+F`
-- 🎨 **Customizable**: Choose symbols, intervals, themes, and chart styles
-- 👻 **Opacity Control**: Adjust transparency to see content underneath
-- 🔄 **Quick Toggle**: Show/hide the widget instantly
-- 📱 **Minimize Function**: Collapse to header bar when not needed
+- 🚀 **Cross-platform**: Works on Windows, Mac, and Linux
+- 📈 **Real-time Charts**: Direct integration with TradingView charts
+- 🎯 **Always on Top**: Keep charts visible while working in other apps
+- 🎨 **Customizable**: Dark/light themes, multiple chart styles
+- 💾 **Persistent Settings**: Remembers your preferences and window position
+- 🔄 **Auto-reload**: Smart fallback system if charts fail to load
+- 🎛️ **System Tray**: Minimize to tray for easy access
+- ⌨️ **Keyboard Shortcuts**: Quick access to settings and functions
 
-## Installation
+## Installation & Setup
 
-1. Download or clone this repository
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the extension directory
-5. The extension icon will appear in your toolbar
+### Prerequisites
+- Node.js 16+ installed on your system
+- Git (optional, for cloning)
+
+### Quick Start
+
+1. **Clone or download** this repository:
+```bash
+git clone https://github.com/Akramovic1/floating-tradingview.git
+cd floating-tradingview
+```
+
+2. **Install dependencies**:
+```bash
+npm install
+```
+
+3. **Run the application**:
+```bash
+npm start
+```
+
+### Building Executables
+
+To create executable files for distribution:
+
+**For Windows:**
+```bash
+npm run build-win
+```
+
+**For macOS:**
+```bash
+npm run build-mac
+```
+
+**For all platforms:**
+```bash
+npm run build-all
+```
+
+Built applications will be in the `dist/` folder.
 
 ## Usage
 
-### Basic Controls
+### Basic Operations
+- **Open**: Double-click the executable or run `npm start`
+- **Settings**: Click the gear icon or press `Ctrl/Cmd + ,`
+- **Always on Top**: Toggle via View menu or system tray
+- **Minimize**: Click minimize button or minimize to system tray
+- **Close**: Click X button (minimizes to tray) or right-click tray → Quit
 
-- **Click the extension icon** or press `Ctrl+Shift+T` to toggle the widget
-- **Drag the header** to move the window
-- **Drag the bottom-right corner** to resize
-- **Click the minimize button (−)** to collapse the widget
-- **Click the settings button (⚙)** to open configuration
-- **Click the close button (✕)** to hide the widget
+### Keyboard Shortcuts
+- `Ctrl/Cmd + ,` - Open Settings
+- `Ctrl/Cmd + R` - Reload Chart
+- `Ctrl/Cmd + T` - Toggle Always on Top
+- `Escape` - Close Settings Panel
 
-### Configuration Options
+### Customization
+1. Click the **Settings (⚙)** button
+2. Configure:
+   - **Symbol**: Stock/crypto symbol (e.g., BTCUSD, AAPL, TSLA)
+   - **Time Interval**: 1m, 5m, 15m, 30m, 1h, 4h, 1D, 1W, 1M
+   - **Theme**: Dark or Light
+   - **Chart Style**: Candles, Bars, Line, Area, etc.
+3. Click **Save & Apply**
 
-- **Symbol**: Enter any valid TradingView symbol (e.g., BTCUSD, AAPL, EURUSD)
-- **Time Interval**: Choose from 1 minute to monthly timeframes
-- **Theme**: Light or dark mode
-- **Chart Style**: Candles, bars, line, area, and more
-- **Opacity**: Adjust window transparency (30% to 100%)
+### System Tray
+- **Left-click tray icon**: Show/hide window
+- **Right-click tray icon**: Context menu with options
+- **Balloon notification**: Shows when first minimized to tray
 
-### Popular Symbols Quick Select
+## Privacy & Security
 
-Click on any symbol chip in the settings to quickly switch between:
-
-- BTCUSD (Bitcoin/USD)
-- ETHUSD (Ethereum/USD)
-- EURUSD (Euro/USD)
-- AAPL (Apple)
-- TSLA (Tesla)
-- SPY (S&P 500 ETF)
-
-## Privacy & Permissions
-
-This extension requires the following permissions:
-
-- **Storage**: To save your settings and preferences
-- **Active Tab**: To inject the floating widget
-- **All URLs**: To work on any website
-
-The extension does not collect or transmit any personal data.
+This application:
+- **No data collection**: Does not collect or transmit personal data
+- **Local storage only**: Settings saved locally on your device
+- **TradingView integration**: Uses official TradingView widgets
+- **No external servers**: Direct connection to TradingView only
 
 ## Troubleshooting
 
-### Widget not appearing
+### Chart Not Loading
+1. **Check internet connection**
+2. **Try different symbol** (e.g., AAPL, GOOGL, BTCUSD)
+3. **Reload chart**: Press `Ctrl/Cmd + R`
+4. **Restart application**
+5. **Check firewall/antivirus** - may block TradingView connections
 
-- Ensure the extension is enabled in Chrome
-- Try refreshing the page
-- Check if the widget is minimized or hidden
+### Window Issues
+- **Window off-screen**: Delete settings file and restart:
+  - Windows: `%APPDATA%/floating-tradingview-desktop/config.json`
+  - Mac: `~/Library/Application Support/floating-tradingview-desktop/config.json`
+  - Linux: `~/.config/floating-tradingview-desktop/config.json`
 
-### Chart not loading
-
-- Verify you have an internet connection
-- Check if the symbol is valid
-- Try refreshing the widget through settings
-
-### Position/size not saving
-
-- Ensure you're not in incognito mode
-- Check Chrome storage permissions
+### Performance Issues
+- **Reduce window size** for better performance
+- **Use lighter chart styles** (Line instead of Candles)
+- **Close other applications** consuming resources
 
 ## Development
 
-To modify the extension:
+### Project Structure
+```
+floating-tradingview/
+├── main.js          # Electron main process
+├── renderer.js      # Electron preload script  
+├── index.html       # Main application window
+├── app.js          # Application logic
+├── package.json    # Dependencies and build config
+├── icons/          # Application icons
+└── dist/           # Built executables (after build)
+```
 
-1. Edit the source files
-2. Go to `chrome://extensions/`
-3. Click the refresh icon on the extension card
-4. Reload any tabs where you're using the extension
+### Development Mode
+```bash
+npm run dev
+```
 
-## Credits
+### Building from Source
+1. Install dependencies: `npm install`
+2. Build for your platform: `npm run build-win` / `npm run build-mac`
+3. Executable will be in `dist/` folder
 
-This extension uses the [TradingView Widget](https://www.tradingview.com/widget/) for chart functionality.
+## Technical Details
+
+- **Framework**: Electron 28+
+- **Renderer**: TradingView widgets with fallback system  
+- **Storage**: electron-store for persistent settings
+- **Security**: Context isolation enabled, node integration disabled
+- **Auto-updater**: Ready for implementation
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
 ## License
 
-MIT License - feel free to modify and distribute as needed.
+MIT License - see LICENSE file for details.
+
+## Support
+
+- **Issues**: Report bugs on GitHub Issues
+- **Discussions**: GitHub Discussions for questions
+- **TradingView**: This app uses TradingView widgets - see [TradingView](https://www.tradingview.com) for chart-related questions
+
+---
+
+**Enjoy trading! 📈**
